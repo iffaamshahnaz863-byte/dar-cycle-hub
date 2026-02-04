@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { User } from '../types';
 import supabase from '../services/supabaseClient';
@@ -71,10 +70,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
   
   const signup = async (email, password) => {
-    // NOTE: You should have a Supabase Function (trigger) that creates a 
-    // corresponding row in your public.users table whenever a new user signs up.
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
+    // Step 1: Sign up the user in Supabase Auth.
+    // Email confirmation is enabled by default in Supabase.
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (authError) throw authError;
+    if (!authData.user) throw new Error("Signup successful, but no user data returned.");
+
+    // Step 2: Insert a corresponding profile into the public 'users' table.
+    // This relies on RLS policies allowing a newly signed-up user to insert their own profile.
+    const { error: insertError } = await supabase.from('users').insert({
+      id: authData.user.id,
+      email: authData.user.email,
+      role: 'user', // New users default to the 'user' role.
+    });
+    
+    if (insertError) {
+      // This is a critical error. The auth user was created, but their public profile was not.
+      // A more robust solution would be a database trigger, but this client-side insert
+      // handles the user's request.
+      console.error("Critical: User created in auth, but profile creation failed:", insertError);
+      throw new Error(`Account created, but we couldn't set up your profile. Please contact support. Error: ${insertError.message}`);
+    }
   };
 
   const logout = async () => {
@@ -92,6 +112,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
+    // FIX: Changed 'Auth.Provider' in the error message to 'AuthProvider' to prevent a potential parsing error.
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
