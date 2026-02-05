@@ -1,8 +1,15 @@
+// FIX: Add a triple-slash directive to include Vite's client types,
+// which provides type definitions for `import.meta.env`.
+/// <reference types="vite/client" />
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://dwlffwkrpwmskremlyey.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3bGZmd2tycHdtc2tyZW1seWV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxOTg5MTgsImV4cCI6MjA4NTc3NDkxOH0.7l2jtFNkC1p3o3uXIQX-Sh4nHbWt73eTOqLeHEZXhq8';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("Supabase URL and Anon Key must be provided in the environment variables.");
+}
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
