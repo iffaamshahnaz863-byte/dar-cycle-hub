@@ -15,6 +15,8 @@ import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdminProductsPage from './pages/admin/AdminProductsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminProtectedRoute from './components/AdminProtectedRoute';
+import CheckoutPage from './pages/user/CheckoutPage';
+import OrderSuccessPage from './pages/user/OrderSuccessPage';
 
 const App: React.FC = () => {
   return (
@@ -31,6 +33,8 @@ const App: React.FC = () => {
               <Route path="product/:id" element={<ProductDetailPage />} />
               <Route path="cart" element={<CartPage />} />
               <Route path="orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
+              <Route path="checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
+              <Route path="order-success" element={<ProtectedRoute><OrderSuccessPage /></ProtectedRoute>} />
             </Route>
             
             <Route path="/admin" element={<AdminProtectedRoute><Layout isAdmin={true} /></AdminProtectedRoute>}>

@@ -1,36 +1,21 @@
-
-import React, { useState } from 'react';
+import React from 'react';
 import { useCart } from '../../contexts/CartContext';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const CartPage: React.FC = () => {
-  const { cart, updateQuantity, removeFromCart, cartTotal, placeOrder, cartCount } = useCart();
+  const { cart, updateQuantity, removeFromCart, cartTotal, cartCount } = useCart();
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-
-  const handlePlaceOrder = async () => {
-      if (!user) {
-          navigate('/login');
-          return;
-      }
-      setIsPlacingOrder(true);
-      const success = await placeOrder();
-      setIsPlacingOrder(false);
-      if (success) {
-          navigate('/orders');
-      } else {
-          alert('There was an error placing your order. Please try again.');
-      }
-  };
 
   if (cart.length === 0) {
     return (
-      <div className="text-center py-10">
-        <h1 className="text-3xl font-bold mb-4">Your Cart is Empty</h1>
-        <Link to="/" className="text-indigo-600 hover:underline">Continue Shopping</Link>
+      <div className="text-center py-20">
+        <h1 className="text-4xl font-bold mb-4">Your Cart is Empty</h1>
+        <p className="text-gray-600 mb-8">Looks like you haven't added anything to your cart yet.</p>
+        <Link to="/" className="bg-indigo-600 text-white px-8 py-3 rounded-lg hover:bg-indigo-700 transition-colors font-semibold">
+            Continue Shopping
+        </Link>
       </div>
     );
   }
@@ -74,20 +59,19 @@ const CartPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between">
                     <span>Shipping</span>
-                    <span>FREE</span>
+                    <span className="font-semibold text-green-600">FREE</span>
                 </div>
                  <div className="flex justify-between font-bold text-lg pt-2 border-t">
                     <span>Total</span>
                     <span>${cartTotal.toFixed(2)}</span>
                 </div>
             </div>
-            <button 
-                onClick={handlePlaceOrder}
-                disabled={isPlacingOrder}
-                className="w-full bg-indigo-600 text-white mt-6 py-3 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400 transition-colors"
+            <Link 
+                to={user ? "/checkout" : "/login"}
+                className="w-full block text-center bg-indigo-600 text-white mt-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors"
             >
-                {isPlacingOrder ? 'Placing Order...' : 'Place Order (COD)'}
-            </button>
+                Proceed to Checkout
+            </Link>
             {!user && <p className="text-sm text-center mt-2">You need to <Link to="/login" className="text-indigo-600 underline">login</Link> to place an order.</p>}
         </div>
       </div>

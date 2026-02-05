@@ -1,6 +1,113 @@
 
-import { Product, Order, OrderStatus, OrderItem, CartItem } from '../types';
+import { Product, Order, OrderStatus, OrderItem, CartItem, Address } from '../types';
 import supabase from './supabaseClient';
+
+/*
+--------------------------------------------------------------------------------
+-- Supabase Setup for Production-Ready Checkout
+--------------------------------------------------------------------------------
+-- To enable the new checkout flow, please run the following SQL queries in your
+-- Supabase SQL Editor. This sets up the necessary tables and a transactional
+-- function to ensure data integrity.
+
+-- 1. Create the 'addresses' table to store customer shipping details.
+CREATE TABLE IF NOT EXISTS public.addresses (
+    id SERIAL PRIMARY KEY,
+    user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    full_name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    address_line1 TEXT NOT NULL,
+    address_line2 TEXT,
+    city TEXT NOT NULL,
+    state TEXT NOT NULL,
+    postal_code TEXT NOT NULL,
+    country TEXT NOT NULL,
+    address_type TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS for the new addresses table
+ALTER TABLE public.addresses ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view their own addresses" ON public.addresses
+    FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own addresses" ON public.addresses
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+
+-- 2. Add a foreign key for the address to the 'orders' table.
+ALTER TABLE public.orders
+ADD COLUMN IF NOT EXISTS address_id INTEGER REFERENCES public.addresses(id);
+
+
+-- 3. Create the transactional function to handle the entire checkout process atomically.
+-- This function ensures that if any step fails (e.g., out of stock), the entire transaction is rolled back.
+CREATE OR REPLACE FUNCTION public.handle_place_order(
+    p_user_id uuid,
+    p_user_email text,
+    p_full_name text,
+    p_phone text,
+    p_address_line1 text,
+    p_address_line2 text,
+    p_city text,
+    p_state text,
+    p_postal_code text,
+    p_country text,
+    p_address_type text,
+    p_cart_items jsonb
+)
+RETURNS int
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  new_address_id int;
+  new_order_id int;
+  total_amount numeric := 0;
+  cart_item record;
+  product_stock int;
+BEGIN
+  -- 1. Insert the address and get its ID
+  INSERT INTO public.addresses (user_id, full_name, phone, address_line1, address_line2, city, state, postal_code, country, address_type)
+  VALUES (p_user_id, p_full_name, p_phone, p_address_line1, p_address_line2, p_city, p_state, p_postal_code, p_country, p_address_type)
+  RETURNING id INTO new_address_id;
+
+  -- 2. Calculate total amount from cart items
+  FOR cart_item IN SELECT * FROM jsonb_to_recordset(p_cart_items) AS x(product_id uuid, quantity int, price numeric)
+  LOOP
+    total_amount := total_amount + (cart_item.quantity * cart_item.price);
+  END LOOP;
+
+  -- 3. Insert the order and get its ID
+  INSERT INTO public.orders (user_id, user_email, total, status, address_id)
+  VALUES (p_user_id, p_user_email, total_amount, 'Pending', new_address_id)
+  RETURNING id INTO new_order_id;
+
+  -- 4. Insert order items and update product stock
+  FOR cart_item IN SELECT * FROM jsonb_to_recordset(p_cart_items) AS x(product_id uuid, quantity int, price numeric)
+  LOOP
+    -- Check for sufficient stock (with locking to prevent race conditions)
+    SELECT stock INTO product_stock FROM public.products WHERE id = cart_item.product_id FOR UPDATE;
+    IF product_stock < cart_item.quantity THEN
+      RAISE EXCEPTION 'Not enough stock for product ID %', cart_item.product_id;
+    END IF;
+
+    -- Insert order item
+    INSERT INTO public.order_items (order_id, product_id, quantity, price)
+    VALUES (new_order_id, cart_item.product_id, cart_item.quantity, cart_item.price);
+
+    -- Update product stock
+    UPDATE public.products
+    SET stock = stock - cart_item.quantity
+    WHERE id = cart_item.product_id;
+  END LOOP;
+
+  -- 5. Return the new order ID
+  RETURN new_order_id;
+END;
+$$;
+
+*/
+
 
 // Mapper to convert snake_case from DB to camelCase for the frontend
 const productFromDB = (dbProduct: any): Product => ({
@@ -33,23 +140,6 @@ const orderFromDB = (dbOrder: any): Order => ({
 // Cache for table columns to avoid repeated RPC calls within a session.
 let productsTableColumns: string[] | null = null;
 
-/**
- * Fetches the column names for the 'products' table using an RPC call.
- * This is a critical function for making the app resilient to schema changes.
- * NOTE: This requires a corresponding function to be created in your Supabase database.
- *
- * Run the following in your Supabase SQL Editor:
- *
- * create or replace function get_table_columns(p_table_name text)
- * returns setof text as $$
- * begin
- *   return query
- *   select column_name
- *   from information_schema.columns
- *   where table_schema = 'public' and table_name = p_table_name;
- * end;
- * $$ language plpgsql;
- */
 const getProductsTableColumns = async (): Promise<string[]> => {
     if (productsTableColumns) {
         return productsTableColumns;
@@ -60,7 +150,6 @@ const getProductsTableColumns = async (): Promise<string[]> => {
 
     if (error) {
         console.error("CRITICAL: Could not fetch 'products' table schema via RPC. The app may not save data correctly. Ensure the 'get_table_columns' function exists in your Supabase project.", error);
-        // Fallback to a default set of columns to prevent total failure.
         return ['id', 'name', 'description', 'price', 'image_url', 'stock', 'category', 'created_at'];
     }
 
@@ -69,7 +158,6 @@ const getProductsTableColumns = async (): Promise<string[]> => {
     return productsTableColumns;
 };
 
-// Maps camelCase frontend model properties to snake_case database columns.
 const productFieldToColumnMap: { [key: string]: string } = {
     name: 'name',
     description: 'description',
@@ -111,7 +199,6 @@ export const getProducts = async (): Promise<Product[]> => {
 export const getProductById = async (id: string): Promise<Product | undefined> => {
   const { data, error } = await supabase.from('products').select('*').eq('id', id).single();
   if (error) {
-    // This detailed log is crucial for debugging RLS or missing product issues.
     console.error(`Supabase error fetching product by ID '${id}':`, error.message);
     return undefined;
   };
@@ -121,7 +208,6 @@ export const getProductById = async (id: string): Promise<Product | undefined> =
 export const addProduct = async (productData: Omit<Product, 'id'>): Promise<Product> => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error("You are not logged in. Please log in to add a product.");
-    console.log(`User ${session.user.email} is attempting to add a product.`);
 
     const availableColumns = await getProductsTableColumns();
     const productPayload: { [key: string]: any } = {};
@@ -130,21 +216,12 @@ export const addProduct = async (productData: Omit<Product, 'id'>): Promise<Prod
         const columnName = productFieldToColumnMap[key];
         if (columnName && availableColumns.includes(columnName)) {
             productPayload[columnName] = productData[key as keyof typeof productData];
-        } else if (columnName) {
-            console.warn(`SCHEMA MISMATCH: Column '${columnName}' for field '${key}' not found in 'products' table. Skipping this field.`);
         }
     }
     
-    // **THE FIX**: Manually generate and add the UUID on the client-side.
-    // This makes the app resilient and ensures a valid ID is always present,
-    // regardless of whether the database table has a default value set.
     if (availableColumns.includes('id')) {
         productPayload.id = crypto.randomUUID();
-    } else {
-        console.warn("SCHEMA MISMATCH: 'id' column not found in 'products' table. Product insertion will likely fail.");
     }
-
-    console.log("Dynamically built, schema-safe product insert payload:", productPayload);
 
     const { data, error } = await supabase.from('products').insert(productPayload).select().single();
 
@@ -156,31 +233,17 @@ export const addProduct = async (productData: Omit<Product, 'id'>): Promise<Prod
 };
 
 export const updateProduct = async (productData: Product): Promise<Product> => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw new Error("You are not logged in. Please log in to update a product.");
-    console.log(`User ${session.user.email} is attempting to update product #${productData.id}.`);
-
-    const availableColumns = await getProductsTableColumns();
-    const productPayload: { [key: string]: any } = {};
     const { id, ...updateData } = productData;
-
-    for (const key in updateData) {
-        const columnName = productFieldToColumnMap[key];
-        if (columnName && availableColumns.includes(columnName)) {
-            productPayload[columnName] = updateData[key as keyof typeof updateData];
-        } else if (columnName) {
-            console.warn(`SCHEMA MISMATCH: Column '${columnName}' for field '${key}' not found in 'products' table. Skipping this field.`);
-        }
-    }
+    const { data, error } = await supabase.from('products').update({
+        name: updateData.name,
+        description: updateData.description,
+        price: updateData.price,
+        image_url: updateData.imageUrl,
+        stock: updateData.stock,
+        category: updateData.category,
+    }).eq('id', id).select().single();
     
-    console.log(`Dynamically built, schema-safe product update payload for id ${id}:`, productPayload);
-
-    const { data, error } = await supabase.from('products').update(productPayload).eq('id', productData.id).select().single();
-    
-    if (error) {
-        console.error("Supabase error while updating product:", error);
-        throw error;
-    }
+    if (error) throw error;
     return productFromDB(data);
 };
 
@@ -211,45 +274,46 @@ export const getAllOrders = async (): Promise<Order[]> => {
   return data.map(orderFromDB);
 };
 
-export const createOrder = async (userId: string, userEmail: string, cart: CartItem[]): Promise<Order> => {
-  const total = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+/**
+ * Places a new order by calling the transactional database function.
+ * This is the primary function for the checkout process.
+ *
+ * @param userId The ID of the user placing the order.
+ * @param userEmail The email of the user.
+ * @param address The complete shipping address.
+ * @param cart The user's shopping cart.
+ * @returns The new order ID.
+ */
+export const placeOrderWithDetails = async (userId: string, userEmail: string, address: Address, cart: CartItem[]): Promise<number> => {
+    const cartItemsPayload = cart.map(item => ({
+        product_id: item.product.id,
+        quantity: item.quantity,
+        price: item.product.price,
+    }));
 
-  const { data: orderData, error: orderError } = await supabase
-    .from('orders')
-    .insert({
-      user_id: userId,
-      user_email: userEmail,
-      total: total,
-      status: OrderStatus.Pending,
-    })
-    .select()
-    .single();
+    const { data, error } = await supabase.rpc('handle_place_order', {
+        p_user_id: userId,
+        p_user_email: userEmail,
+        p_full_name: address.fullName,
+        p_phone: address.phone,
+        p_address_line1: address.addressLine1,
+        p_address_line2: address.addressLine2,
+        p_city: address.city,
+        p_state: address.state,
+        p_postal_code: address.postalCode,
+        p_country: address.country,
+        p_address_type: address.addressType,
+        p_cart_items: cartItemsPayload
+    });
 
-  if (orderError) throw orderError;
-  
-  const newOrderId = orderData.id;
+    if (error) {
+        console.error('Supabase RPC error placing order:', error);
+        throw new Error(`Could not place order. ${error.message}`);
+    }
 
-  const orderItemsToInsert = cart.map(item => ({
-    order_id: newOrderId,
-    product_id: item.product.id,
-    quantity: item.quantity,
-    price: item.product.price,
-  }));
-
-  const { error: itemsError } = await supabase.from('order_items').insert(orderItemsToInsert);
-  
-  if (itemsError) throw itemsError;
-
-  const { data: newOrderData, error: newOrderError } = await supabase
-    .from('orders')
-    .select('*, order_items(*, products(*))')
-    .eq('id', newOrderId)
-    .single();
-
-  if (newOrderError) throw newOrderError;
-
-  return orderFromDB(newOrderData);
+    return data;
 };
+
 
 export const updateOrderStatus = async (orderId: number, status: OrderStatus): Promise<Order> => {
     const { data, error } = await supabase
@@ -260,7 +324,5 @@ export const updateOrderStatus = async (orderId: number, status: OrderStatus): P
         .single();
     if (error) throw error;
 
-    // This won't have the nested items, but it's sufficient for the status update.
-    // To return the full order would require another fetch.
     return { ...data, items: [] } as Order; 
 };

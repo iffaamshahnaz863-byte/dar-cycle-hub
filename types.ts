@@ -44,3 +44,15 @@ export interface Order {
   status: OrderStatus;
   createdAt: Date;
 }
+
+export interface Address {
+  fullName: string;
+  phone: string;
+  addressLine1: string; // House / Flat / Building Name
+  addressLine2: string; // Street / Area
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  addressType: 'Home' | 'Office';
+}
