@@ -64,6 +64,17 @@ export const getProductById = async (id: number): Promise<Product | undefined> =
 };
 
 export const addProduct = async (productData: Omit<Product, 'id'>): Promise<Product> => {
+    // For debugging RLS issues, let's check the current user session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+        console.error("Error getting session:", sessionError);
+        throw new Error("Could not verify user session. Please log in again.");
+    }
+    if (!session) {
+        throw new Error("You are not logged in. Please log in to add a product.");
+    }
+    console.log(`User ${session.user.email} (ID: ${session.user.id}) is attempting to add a product.`);
+
     const { data, error } = await supabase.from('products').insert({
         name: productData.name,
         description: productData.description,
@@ -73,11 +84,25 @@ export const addProduct = async (productData: Omit<Product, 'id'>): Promise<Prod
         category: productData.category,
     }).select().single();
 
-    if (error) throw error;
+    if (error) {
+        console.error("Supabase error while adding product:", error);
+        throw error;
+    }
     return productFromDB(data);
 };
 
 export const updateProduct = async (productData: Product): Promise<Product> => {
+    // For debugging RLS issues, let's check the current user session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+        console.error("Error getting session:", sessionError);
+        throw new Error("Could not verify user session. Please log in again.");
+    }
+    if (!session) {
+        throw new Error("You are not logged in. Please log in to update a product.");
+    }
+    console.log(`User ${session.user.email} (ID: ${session.user.id}) is attempting to update product #${productData.id}.`);
+
     const { data, error } = await supabase.from('products').update({
         name: productData.name,
         description: productData.description,
@@ -87,7 +112,10 @@ export const updateProduct = async (productData: Product): Promise<Product> => {
         category: productData.category,
     }).eq('id', productData.id).select().single();
     
-    if (error) throw error;
+    if (error) {
+        console.error("Supabase error while updating product:", error);
+        throw error;
+    }
     return productFromDB(data);
 };
 
