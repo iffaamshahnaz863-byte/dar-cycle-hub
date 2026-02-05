@@ -28,6 +28,60 @@ const orderFromDB = (dbOrder: any): Order => ({
     createdAt: new Date(dbOrder.created_at),
 });
 
+// --- START: Schema-Aware Product Management ---
+
+// Cache for table columns to avoid repeated RPC calls within a session.
+let productsTableColumns: string[] | null = null;
+
+/**
+ * Fetches the column names for the 'products' table using an RPC call.
+ * This is a critical function for making the app resilient to schema changes.
+ * NOTE: This requires a corresponding function to be created in your Supabase database.
+ *
+ * Run the following in your Supabase SQL Editor:
+ *
+ * create or replace function get_table_columns(p_table_name text)
+ * returns setof text as $$
+ * begin
+ *   return query
+ *   select column_name
+ *   from information_schema.columns
+ *   where table_schema = 'public' and table_name = p_table_name;
+ * end;
+ * $$ language plpgsql;
+ */
+const getProductsTableColumns = async (): Promise<string[]> => {
+    if (productsTableColumns) {
+        return productsTableColumns;
+    }
+
+    console.log("Fetching 'products' table schema for the first time...");
+    const { data, error } = await supabase.rpc('get_table_columns', { p_table_name: 'products' });
+
+    if (error) {
+        console.error("CRITICAL: Could not fetch 'products' table schema via RPC. The app may not save data correctly. Ensure the 'get_table_columns' function exists in your Supabase project.", error);
+        // Fallback to a default set of columns to prevent total failure.
+        return ['id', 'name', 'description', 'price', 'image_url', 'stock', 'category', 'created_at'];
+    }
+
+    console.log("Successfully fetched 'products' table columns:", data);
+    productsTableColumns = data as string[];
+    return productsTableColumns;
+};
+
+// Maps camelCase frontend model properties to snake_case database columns.
+const productFieldToColumnMap: { [key: string]: string } = {
+    name: 'name',
+    description: 'description',
+    price: 'price',
+    imageUrl: 'image_url',
+    stock: 'stock',
+    category: 'category',
+};
+
+// --- END: Schema-Aware Product Management ---
+
+
 // Image Upload API
 export const uploadProductImage = async (file: File): Promise<string> => {
     const fileName = `${Date.now()}-${file.name}`;
@@ -64,25 +118,25 @@ export const getProductById = async (id: number): Promise<Product | undefined> =
 };
 
 export const addProduct = async (productData: Omit<Product, 'id'>): Promise<Product> => {
-    // For debugging RLS issues, let's check the current user session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError) {
-        console.error("Error getting session:", sessionError);
-        throw new Error("Could not verify user session. Please log in again.");
-    }
-    if (!session) {
-        throw new Error("You are not logged in. Please log in to add a product.");
-    }
-    console.log(`User ${session.user.email} (ID: ${session.user.id}) is attempting to add a product.`);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("You are not logged in. Please log in to add a product.");
+    console.log(`User ${session.user.email} is attempting to add a product.`);
 
-    const { data, error } = await supabase.from('products').insert({
-        name: productData.name,
-        description: productData.description,
-        price: productData.price,
-        image_url: productData.imageUrl,
-        stock: productData.stock,
-        category: productData.category,
-    }).select().single();
+    const availableColumns = await getProductsTableColumns();
+    const productPayload: { [key: string]: any } = {};
+
+    for (const key in productData) {
+        const columnName = productFieldToColumnMap[key];
+        if (columnName && availableColumns.includes(columnName)) {
+            productPayload[columnName] = productData[key as keyof typeof productData];
+        } else if (columnName) {
+            console.warn(`SCHEMA MISMATCH: Column '${columnName}' for field '${key}' not found in 'products' table. Skipping this field.`);
+        }
+    }
+    
+    console.log("Dynamically built, schema-safe product insert payload:", productPayload);
+
+    const { data, error } = await supabase.from('products').insert(productPayload).select().single();
 
     if (error) {
         console.error("Supabase error while adding product:", error);
@@ -92,25 +146,26 @@ export const addProduct = async (productData: Omit<Product, 'id'>): Promise<Prod
 };
 
 export const updateProduct = async (productData: Product): Promise<Product> => {
-    // For debugging RLS issues, let's check the current user session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError) {
-        console.error("Error getting session:", sessionError);
-        throw new Error("Could not verify user session. Please log in again.");
-    }
-    if (!session) {
-        throw new Error("You are not logged in. Please log in to update a product.");
-    }
-    console.log(`User ${session.user.email} (ID: ${session.user.id}) is attempting to update product #${productData.id}.`);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("You are not logged in. Please log in to update a product.");
+    console.log(`User ${session.user.email} is attempting to update product #${productData.id}.`);
 
-    const { data, error } = await supabase.from('products').update({
-        name: productData.name,
-        description: productData.description,
-        price: productData.price,
-        image_url: productData.imageUrl,
-        stock: productData.stock,
-        category: productData.category,
-    }).eq('id', productData.id).select().single();
+    const availableColumns = await getProductsTableColumns();
+    const productPayload: { [key: string]: any } = {};
+    const { id, ...updateData } = productData;
+
+    for (const key in updateData) {
+        const columnName = productFieldToColumnMap[key];
+        if (columnName && availableColumns.includes(columnName)) {
+            productPayload[columnName] = updateData[key as keyof typeof updateData];
+        } else if (columnName) {
+            console.warn(`SCHEMA MISMATCH: Column '${columnName}' for field '${key}' not found in 'products' table. Skipping this field.`);
+        }
+    }
+    
+    console.log(`Dynamically built, schema-safe product update payload for id ${id}:`, productPayload);
+
+    const { data, error } = await supabase.from('products').update(productPayload).eq('id', productData.id).select().single();
     
     if (error) {
         console.error("Supabase error while updating product:", error);
