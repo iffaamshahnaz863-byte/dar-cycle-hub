@@ -135,6 +135,15 @@ export const addProduct = async (productData: Omit<Product, 'id'>): Promise<Prod
         }
     }
     
+    // **THE FIX**: Manually generate and add the UUID on the client-side.
+    // This makes the app resilient and ensures a valid ID is always present,
+    // regardless of whether the database table has a default value set.
+    if (availableColumns.includes('id')) {
+        productPayload.id = crypto.randomUUID();
+    } else {
+        console.warn("SCHEMA MISMATCH: 'id' column not found in 'products' table. Product insertion will likely fail.");
+    }
+
     console.log("Dynamically built, schema-safe product insert payload:", productPayload);
 
     const { data, error } = await supabase.from('products').insert(productPayload).select().single();
