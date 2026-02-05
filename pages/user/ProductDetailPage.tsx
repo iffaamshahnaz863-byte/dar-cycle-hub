@@ -18,33 +18,34 @@ const ProductDetailPage: React.FC = () => {
   const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
+    window.scrollTo(0, 0); // Scroll to top on component mount
     const fetchProductData = async () => {
       if (id) {
         setLoading(true);
         try {
+          // STEP 3 & 5: Fetch product by ID and log response
+          console.log(`STEP 3 & 5: Fetching product with ID: ${id}`);
           const productData = await getProductById(Number(id));
-          if (productData) {
-            setProduct(productData);
-            document.title = `${productData.name} | DAR CYCLE HUB`;
+          console.log("STEP 3 & 5: Supabase response:", productData);
+          
+          setProduct(productData || null);
 
-            // Fetch similar products
+          if (productData) {
+            document.title = `${productData.name} | DAR CYCLE HUB`;
             const allProducts = await getProducts();
             const related = allProducts.filter(p => p.category === productData.category && p.id !== productData.id).slice(0, 4);
             setSimilarProducts(related);
-
-          } else {
-            navigate('/');
           }
         } catch (error) {
-            console.error("Failed to fetch product details:", error);
-            navigate('/'); // Navigate away on error
+            console.error("STEP 4: Failed to fetch product details:", error);
+            // Optionally set an error state here to show a generic error message
         } finally {
             setLoading(false);
         }
       }
     };
     fetchProductData();
-  }, [id, navigate]);
+  }, [id]);
 
   const handleBuyNow = () => {
     if (product) {
@@ -61,11 +62,15 @@ const ProductDetailPage: React.FC = () => {
   };
 
   if (loading) {
+    // STEP 4: Show loading state
+    console.log("STEP 4: Showing loading state");
     return <ProductDetailSkeleton />;
   }
 
   if (!product) {
-    return <div className="text-center py-20">Product not found.</div>;
+    // STEP 4: Handle product not found case
+    console.log("STEP 4: Product not found, rendering message.");
+    return <div className="text-center py-20 font-semibold text-xl">Product not found.</div>;
   }
   
   const isOutOfStock = product.stock === 0;
@@ -74,7 +79,7 @@ const ProductDetailPage: React.FC = () => {
     <div className="bg-gray-100 py-8">
         <div className="container mx-auto px-4">
             {/* Breadcrumbs */}
-            <div className="text-sm text-gray-600 mb-4 flex items-center">
+            <div className="text-sm text-gray-600 mb-4 flex items-center flex-wrap">
                 <Link to="/" className="hover:text-indigo-600">Home</Link>
                 <ChevronRight size={16} className="mx-1" />
                 <span className="font-semibold">{product.category || 'Category'}</span>
@@ -118,7 +123,7 @@ const ProductDetailPage: React.FC = () => {
                         id="quantity" 
                         name="quantity" 
                         min="1" 
-                        max={product.stock}
+                        max={product.stock > 0 ? product.stock : 1}
                         value={quantity}
                         onChange={(e) => setQuantity(Math.max(1, Math.min(product.stock, Number(e.target.value))))}
                         className="w-20 border-gray-300 border rounded-md p-2 text-center"
