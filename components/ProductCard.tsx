@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Product } from '../types';
 import { useCart } from '../contexts/CartContext';
 import { ShoppingCart } from 'lucide-react';
@@ -11,17 +11,14 @@ interface ProductCardProps {
 
 const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     const { addToCart } = useCart();
-    const navigate = useNavigate();
-
-    const handleCardClick = () => {
-      console.log(`STEP 2 & 5: Navigation fired for product ID: ${product.id}`);
-      navigate(`/product/${product.id}`);
-    };
 
   return (
     <div className="bg-white border rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-shadow duration-300 flex flex-col justify-between group">
-      <div onClick={handleCardClick} className="block cursor-pointer">
+      {/* The top part of the card is a link to the product detail page. */}
+      {/* This strictly separates navigation from other actions and is the idiomatic way to handle routing. */}
+      <Link to={`/product/${product.id}`} className="block cursor-pointer">
         <div className="overflow-hidden">
+          {/* Using a standard <img> tag ensures the image URL is never treated as a route. */}
           <img 
             src={product.imageUrl} 
             alt={product.name} 
@@ -34,7 +31,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </h3>
           <p className="text-gray-600 text-sm mb-3 h-10 overflow-hidden">{product.description}</p>
         </div>
-      </div>
+      </Link>
+      
+      {/* The bottom part contains actions that do not navigate. */}
       <div className="p-4 pt-0">
         <div className="flex justify-between items-center">
           <span className="text-xl font-bold text-gray-800">

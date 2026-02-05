@@ -108,10 +108,11 @@ export const getProducts = async (): Promise<Product[]> => {
   return data.map(productFromDB);
 };
 
-export const getProductById = async (id: number): Promise<Product | undefined> => {
+export const getProductById = async (id: string): Promise<Product | undefined> => {
   const { data, error } = await supabase.from('products').select('*').eq('id', id).single();
   if (error) {
-    console.error(error);
+    // This detailed log is crucial for debugging RLS or missing product issues.
+    console.error(`Supabase error fetching product by ID '${id}':`, error.message);
     return undefined;
   };
   return data ? productFromDB(data) : undefined;
@@ -174,7 +175,7 @@ export const updateProduct = async (productData: Product): Promise<Product> => {
     return productFromDB(data);
 };
 
-export const deleteProduct = async (productId: number): Promise<void> => {
+export const deleteProduct = async (productId: string): Promise<void> => {
     const { error } = await supabase.from('products').delete().eq('id', productId);
     if (error) throw error;
 };

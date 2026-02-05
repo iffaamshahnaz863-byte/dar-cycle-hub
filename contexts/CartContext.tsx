@@ -7,8 +7,8 @@ import { useAuth } from './AuthContext';
 interface CartContextType {
   cart: CartItem[];
   addToCart: (product: Product, quantity: number) => void;
-  updateQuantity: (productId: number, quantity: number) => void;
-  removeFromCart: (productId: number) => void;
+  updateQuantity: (productId: string, quantity: number) => void;
+  removeFromCart: (productId: string) => void;
   clearCart: () => void;
   cartCount: number;
   cartTotal: number;
@@ -51,7 +51,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   };
 
-  const updateQuantity = (productId: number, quantity: number) => {
+  const updateQuantity = (productId: string, quantity: number) => {
     setCart(prevCart =>
       prevCart.map(item =>
         item.product.id === productId ? { ...item, quantity } : item
@@ -59,7 +59,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     );
   };
 
-  const removeFromCart = (productId: number) => {
+  const removeFromCart = (productId: string) => {
     setCart(prevCart => prevCart.filter(item => item.product.id !== productId));
   };
 

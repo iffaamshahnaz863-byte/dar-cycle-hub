@@ -25,7 +25,7 @@ const ProductDetailPage: React.FC = () => {
         try {
           // STEP 3 & 5: Fetch product by ID and log response
           console.log(`STEP 3 & 5: Fetching product with ID: ${id}`);
-          const productData = await getProductById(Number(id));
+          const productData = await getProductById(id); // FIX: Removed Number() conversion
           console.log("STEP 3 & 5: Supabase response:", productData);
           
           setProduct(productData || null);

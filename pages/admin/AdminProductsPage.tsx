@@ -40,7 +40,7 @@ const AdminProductsPage: React.FC = () => {
     setIsFormOpen(true);
   };
 
-  const handleDelete = async (productId: number) => {
+  const handleDelete = async (productId: string) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
       try {
         await deleteProduct(productId);
