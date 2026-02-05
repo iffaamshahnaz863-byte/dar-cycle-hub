@@ -54,7 +54,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onClose }) => {
     setError(null);
     setSuccess(null);
 
-    // --- 6. Data Validation ---
+    // --- Data Validation ---
     if (!formData.name.trim()) {
         setError('Product name is required.');
         return;
@@ -98,6 +98,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onClose }) => {
         const newProduct = await addProduct(productData);
         console.log('Step 5: Product added successfully in DB:', newProduct);
         setSuccess('Product added successfully!');
+        // Reset form on successful addition
+        setFormData({ name: '', description: '', price: 0, imageUrl: '', stock: 0, category: '' });
+        setImageFile(null);
       }
       
       setTimeout(() => {
@@ -112,7 +115,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onClose }) => {
       }
       setError(userFriendlyError);
     } finally {
-      // --- 1. Ensure loading state ALWAYS stops ---
       console.log('Step 6: Final block reached. Resetting submitting state.');
       setIsSubmitting(false);
     }

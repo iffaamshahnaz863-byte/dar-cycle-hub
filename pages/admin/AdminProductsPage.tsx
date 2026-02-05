@@ -3,19 +3,27 @@ import React, { useState, useEffect } from 'react';
 import { Product } from '../../types';
 import { getProducts, deleteProduct } from '../../services/mockApi';
 import ProductForm from '../../components/admin/ProductForm';
-import { Edit, Trash, PlusCircle } from 'lucide-react';
+import { Edit, Trash, PlusCircle, AlertCircle } from 'lucide-react';
 
 const AdminProductsPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const fetchProducts = async () => {
     setLoading(true);
-    const data = await getProducts();
-    setProducts(data);
-    setLoading(false);
+    setError(null);
+    try {
+      const data = await getProducts();
+      setProducts(data);
+    } catch (err: any) {
+      console.error("Failed to fetch products:", err);
+      setError("Failed to load products. Please check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -34,8 +42,13 @@ const AdminProductsPage: React.FC = () => {
 
   const handleDelete = async (productId: number) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
+      try {
         await deleteProduct(productId);
-        fetchProducts();
+        setProducts(prevProducts => prevProducts.filter(p => p.id !== productId));
+      } catch (err: any) {
+        console.error("Failed to delete product:", err);
+        setError("Failed to delete product. It may be associated with existing orders.");
+      }
     }
   };
   
@@ -45,24 +58,25 @@ const AdminProductsPage: React.FC = () => {
     fetchProducts(); // Refresh list after add/edit
   };
 
-  if (loading) {
-    return <div>Loading products...</div>;
-  }
+  const renderContent = () => {
+    if (loading) {
+      return <div className="text-center p-8">Loading products...</div>;
+    }
 
-  return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Manage Products</h1>
-        <button
-          onClick={handleAddNew}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center"
-        >
-          <PlusCircle className="w-5 h-5 mr-2" />
-          Add New Product
-        </button>
-      </div>
-
-      <div className="bg-white shadow-md rounded-lg overflow-x-auto">
+    if (error) {
+       return (
+        <div className="text-center p-8 bg-red-50 text-red-700 rounded-lg">
+          <AlertCircle className="mx-auto h-12 w-12" />
+          <h3 className="mt-2 text-sm font-medium">An Error Occurred</h3>
+          <div className="mt-1 text-sm">
+            <p>{error}</p>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+        <div className="bg-white shadow-md rounded-lg overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -102,6 +116,25 @@ const AdminProductsPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+    );
+  };
+
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Manage Products</h1>
+        <button
+          onClick={handleAddNew}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center"
+        >
+          <PlusCircle className="w-5 h-5 mr-2" />
+          Add New Product
+        </button>
+      </div>
+      
+      {renderContent()}
+
       {isFormOpen && <ProductForm product={editingProduct} onClose={handleFormClose} />}
     </div>
   );
