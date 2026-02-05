@@ -3,19 +3,41 @@ import React, { useState, useEffect } from 'react';
 import { Product } from '../../types';
 import { getProducts } from '../../services/mockApi';
 import ProductCard from '../../components/ProductCard';
+import { AlertCircle } from 'lucide-react';
 
 const HomePage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+
     const fetchProducts = async () => {
       setLoading(true);
-      const data = await getProducts();
-      setProducts(data);
-      setLoading(false);
+      setError(null);
+      try {
+        const data = await getProducts({ signal });
+        if (!signal.aborted) {
+          setProducts(data);
+        }
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error("Failed to fetch products:", err);
+          setError("Could not load products. Please try refreshing the page.");
+        }
+      } finally {
+        if (!signal.aborted) {
+          setLoading(false);
+        }
+      }
     };
     fetchProducts();
+
+    return () => {
+      controller.abort();
+    };
   }, []);
 
   if (loading) {
@@ -34,6 +56,16 @@ const HomePage: React.FC = () => {
             </div>
           </div>
         ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-20 bg-red-50 text-red-700 rounded-lg">
+        <AlertCircle className="mx-auto h-12 w-12" />
+        <h3 className="mt-2 text-xl font-medium">Failed to Load Products</h3>
+        <p className="mt-1">{error}</p>
       </div>
     );
   }

@@ -190,17 +190,20 @@ export const uploadProductImage = async (file: File): Promise<string> => {
 
 
 // Products API
-export const getProducts = async (): Promise<Product[]> => {
-  const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+export const getProducts = async ({ signal }: { signal?: AbortSignal } = {}): Promise<Product[]> => {
+  const { data, error } = await supabase.from('products').select('*', { signal }).order('created_at', { ascending: false });
   if (error) throw error;
   return data.map(productFromDB);
 };
 
-export const getProductById = async (id: string): Promise<Product | undefined> => {
-  const { data, error } = await supabase.from('products').select('*').eq('id', id).single();
+export const getProductById = async (id: string, { signal }: { signal?: AbortSignal } = {}): Promise<Product | undefined> => {
+  const { data, error } = await supabase.from('products').select('*', { signal }).eq('id', id).single();
   if (error) {
-    console.error(`Supabase error fetching product by ID '${id}':`, error.message);
-    return undefined;
+    if (error.name !== 'AbortError') {
+      console.error(`Supabase error fetching product by ID '${id}':`, error.message);
+    }
+    // Re-throw the error to be handled by the caller
+    throw error;
   };
   return data ? productFromDB(data) : undefined;
 };
@@ -253,10 +256,10 @@ export const deleteProduct = async (productId: string): Promise<void> => {
 };
 
 // Orders API
-export const getUserOrders = async (userId: string): Promise<Order[]> => {
+export const getUserOrders = async (userId: string, { signal }: { signal?: AbortSignal } = {}): Promise<Order[]> => {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*, products(*))')
+    .select('*, order_items(*, products(*))', { signal })
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
   
@@ -264,10 +267,10 @@ export const getUserOrders = async (userId: string): Promise<Order[]> => {
   return data.map(orderFromDB);
 };
 
-export const getAllOrders = async (): Promise<Order[]> => {
+export const getAllOrders = async ({ signal }: { signal?: AbortSignal } = {}): Promise<Order[]> => {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*, products(*))')
+    .select('*, order_items(*, products(*))', { signal })
     .order('created_at', { ascending: false });
     
   if (error) throw error;

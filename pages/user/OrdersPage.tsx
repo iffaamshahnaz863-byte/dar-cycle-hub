@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Order } from '../../types';
 import { getUserOrders } from '../../services/mockApi';
 import { useAuth } from '../../contexts/AuthContext';
+import { AlertCircle } from 'lucide-react';
 
 const OrderStatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const baseClasses = 'px-2 py-1 text-xs font-semibold rounded-full';
@@ -19,22 +20,57 @@ const OrderStatusBadge: React.FC<{ status: string }> = ({ status }) => {
 const OrdersPage: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      if (user) {
-        setLoading(true);
-        const data = await getUserOrders(user.id);
-        setOrders(data);
+    if (!user) {
         setLoading(false);
+        return;
+    };
+
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    const fetchOrders = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getUserOrders(user.id, { signal });
+        if (!signal.aborted) {
+            setOrders(data);
+        }
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error("Failed to fetch orders:", err);
+          setError("Could not load your orders. Please try again later.");
+        }
+      } finally {
+        if (!signal.aborted) {
+          setLoading(false);
+        }
       }
     };
+    
     fetchOrders();
+
+    return () => {
+        controller.abort();
+    };
   }, [user]);
 
   if (loading) {
     return <div className="text-center py-10">Loading your orders...</div>;
+  }
+
+  if (error) {
+     return (
+      <div className="text-center py-20 bg-red-50 text-red-700 rounded-lg">
+        <AlertCircle className="mx-auto h-12 w-12" />
+        <h3 className="mt-2 text-xl font-medium">An Error Occurred</h3>
+        <p className="mt-1">{error}</p>
+      </div>
+    );
   }
 
   if (orders.length === 0) {

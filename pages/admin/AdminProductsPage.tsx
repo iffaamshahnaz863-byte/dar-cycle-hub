@@ -12,22 +12,32 @@ const AdminProductsPage: React.FC = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getProducts();
-      setProducts(data);
+      const data = await getProducts({ signal });
+      if (!signal?.aborted) {
+        setProducts(data);
+      }
     } catch (err: any) {
-      console.error("Failed to fetch products:", err);
-      setError("Failed to load products. Please check your connection and try again.");
+      if (err.name !== 'AbortError') {
+        console.error("Failed to fetch products:", err);
+        setError("Failed to load products. Please check your connection and try again.");
+      }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchProducts();
+    const controller = new AbortController();
+    fetchProducts(controller.signal);
+    return () => {
+        controller.abort();
+    };
   }, []);
   
   const handleEdit = (product: Product) => {
@@ -55,7 +65,9 @@ const AdminProductsPage: React.FC = () => {
   const handleFormClose = () => {
     setIsFormOpen(false);
     setEditingProduct(null);
-    fetchProducts(); // Refresh list after add/edit
+    // Re-fetch products with a new AbortController
+    const controller = new AbortController();
+    fetchProducts(controller.signal);
   };
 
   const renderContent = () => {
